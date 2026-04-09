@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monsters Lair V.1</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app">
+    <h1>Monsters Lair V.1</h1>
+    <p class="help">Move: WASD / Arrows | Attack: Auto-fire | Start/Restart: Space</p>
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+    <div class="hud">
+      <span id="time">Time: 0s</span>
+      <span id="hp">HP: 100</span>
+      <span id="level">Level: 1</span>
+      <span id="kills">Kills: 0</span>
+    </div>
+    <p id="status">Press Space to Enter the Lair</p>
+  </main>
+  <script src="./game.js"></script>
+</body>
+</html>

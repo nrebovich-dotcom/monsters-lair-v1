@@ -1,0 +1,47 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #f4ebff;
+  background: radial-gradient(circle at top, #24112f 0%, #140a1c 50%, #09050f 100%);
+}
+
+.app {
+  width: min(1000px, 96vw);
+  text-align: center;
+}
+
+h1 {
+  margin-bottom: 0.3rem;
+}
+
+.help {
+  margin-top: 0;
+  color: #cfb1ff;
+}
+
+#gameCanvas {
+  width: 100%;
+  border: 2px solid #7040a3;
+  border-radius: 8px;
+  background: #1a1124;
+}
+
+.hud {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+}
+
+#status {
+  min-height: 1.5rem;
+  color: #ffd2e8;
+}
