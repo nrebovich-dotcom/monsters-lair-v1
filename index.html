@@ -10,8 +10,9 @@
   <main class="app">
     <h1>Monsters Lair V.1</h1>
     <p class="help">
-      Invaders: Protection Paladin, Devout Priest, Rogue, Mage, Warrior — each in their own lane.
-      Spend mana to send monsters from your lair. Stop them before they reach the core.
+      The invasion marches along a <strong>20×12</strong> path. Five heroes approach in formation:
+      Protection Paladin, Devout Priest, Rogue, Mage, and Warrior.
+      Spend mana to spawn monsters from the <strong>left tiles</strong> — click a square in the first two columns to set the spawn row.
     </p>
     <div class="bar-wrap" aria-hidden="true">
       <div class="bar-label">Mana <span id="manaText">100 / 100</span></div>
@@ -22,7 +23,7 @@
       <div class="bar lair"><div id="lairFill"></div></div>
     </div>
     <div class="controls">
-      <span class="lane-label">Lane <span id="laneNum">1</span> <small>(keys 1–5)</small></span>
+      <span class="spawn-hint">Spawn row: <span id="spawnRow">7</span> <small>(click columns 1–2 on the path)</small></span>
       <button type="button" class="spawn" data-troop="imp" title="12 mana">Imp — 12</button>
       <button type="button" class="spawn" data-troop="brute" title="32 mana">Brute — 32</button>
       <button type="button" class="spawn" data-troop="whelp" title="48 mana">Whelp — 48</button>
