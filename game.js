@@ -1,62 +1,177 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const timeEl = document.getElementById("time");
-const hpEl = document.getElementById("hp");
-const levelEl = document.getElementById("level");
-const killsEl = document.getElementById("kills");
+const manaTextEl = document.getElementById("manaText");
+const manaFillEl = document.getElementById("manaFill");
+const lairTextEl = document.getElementById("lairText");
+const lairFillEl = document.getElementById("lairFill");
+const laneNumEl = document.getElementById("laneNum");
+const heroesLeftEl = document.getElementById("heroesLeft");
+const troopsOutEl = document.getElementById("troopsOut");
 const statusEl = document.getElementById("status");
 
-const keys = new Set();
+const LANES = 5;
+const LAIR_X = 58;
+const LAIR_CORE_X = 42;
+const INVADER_X = canvas.width - 48;
 
 const WORLD = {
-  playerSpeed: 250,
-  enemySpeedBase: 66,
-  enemySpawnMs: 880,
-  fireRateMs: 300,
-  bulletSpeed: 530,
-  touchDamagePerSecond: 30
+  manaMax: 100,
+  manaRegen: 11.5,
+  lairMaxHp: 500,
+  lairTouchDps: 45
 };
 
-const player = {
-  x: canvas.width / 2,
-  y: canvas.height / 2,
-  r: 16,
-  hp: 100,
-  maxHp: 100,
-  level: 1,
-  xp: 0,
-  xpNeed: 10
+const HERO_ORDER = [
+  { classKey: "paladin" },
+  { classKey: "priest" },
+  { classKey: "rogue" },
+  { classKey: "mage" },
+  { classKey: "warrior" }
+];
+
+const HERO_CLASSES = {
+  paladin: {
+    short: "Paladin",
+    maxHp: 410,
+    speed: 40,
+    damage: 7,
+    range: 26,
+    attackCd: 0.62,
+    armor: 0.36,
+    radius: 16,
+    color: "#c8b8ff",
+    plate: "#5a4a8a"
+  },
+  priest: {
+    short: "Priest",
+    maxHp: 125,
+    speed: 46,
+    damage: 3,
+    range: 30,
+    attackCd: 0.88,
+    armor: 0,
+    radius: 14,
+    color: "#fff0c8",
+    plate: "#d4b87a",
+    healAmount: 20,
+    healCd: 1.28,
+    healRange: 220
+  },
+  rogue: {
+    short: "Rogue",
+    maxHp: 92,
+    speed: 58,
+    damage: 14,
+    range: 20,
+    attackCd: 0.3,
+    armor: 0,
+    radius: 13,
+    color: "#9ee0c4",
+    plate: "#2d5a46"
+  },
+  mage: {
+    short: "Mage",
+    maxHp: 82,
+    speed: 44,
+    damage: 12,
+    range: 96,
+    attackCd: 0.48,
+    armor: 0,
+    radius: 13,
+    color: "#8ec8ff",
+    plate: "#2a5a9e"
+  },
+  warrior: {
+    short: "Warrior",
+    maxHp: 210,
+    speed: 50,
+    damage: 11,
+    range: 28,
+    attackCd: 0.4,
+    armor: 0.1,
+    radius: 15,
+    color: "#ffbba6",
+    plate: "#9a4a3a"
+  }
 };
 
+const TROOP_TYPES = {
+  imp: {
+    cost: 12,
+    hpMax: 44,
+    speed: 70,
+    damage: 6,
+    range: 19,
+    attackCd: 0.4,
+    radius: 10,
+    color: "#6bff9a"
+  },
+  brute: {
+    cost: 32,
+    hpMax: 185,
+    speed: 34,
+    damage: 10,
+    range: 24,
+    attackCd: 0.52,
+    radius: 14,
+    color: "#c9a06a"
+  },
+  whelp: {
+    cost: 48,
+    hpMax: 98,
+    speed: 54,
+    damage: 15,
+    range: 40,
+    attackCd: 0.46,
+    radius: 12,
+    color: "#ff7a5c"
+  }
+};
+
+let heroes = [];
+let troops = [];
+let mana = WORLD.manaMax;
+let lairHp = WORLD.lairMaxHp;
+let selectedLane = 0;
 let started = false;
 let gameOver = false;
-let elapsed = 0;
-let kills = 0;
-let enemies = [];
-let bullets = [];
-let souls = [];
-let spawnTimer = 0;
-let fireTimer = 0;
+let victory = false;
 let lastTime = performance.now();
 
+function laneCenterY(lane) {
+  const pad = 78;
+  const h = canvas.height - pad * 2;
+  return pad + (lane / (LANES - 1)) * h;
+}
+
+function buildHeroes() {
+  return HERO_ORDER.map((row, lane) => {
+    const def = HERO_CLASSES[row.classKey];
+    return {
+      classKey: row.classKey,
+      lane,
+      x: INVADER_X,
+      y: laneCenterY(lane),
+      hp: def.maxHp,
+      maxHp: def.maxHp,
+      attackT: 0,
+      healT: 0
+    };
+  });
+}
+
 function resetGame() {
-  player.x = canvas.width / 2;
-  player.y = canvas.height / 2;
-  player.hp = 100;
-  player.maxHp = 100;
-  player.level = 1;
-  player.xp = 0;
-  player.xpNeed = 10;
-  elapsed = 0;
-  kills = 0;
-  enemies = [];
-  bullets = [];
-  souls = [];
-  spawnTimer = 0;
-  fireTimer = 0;
+  heroes = buildHeroes();
+  troops = [];
+  mana = WORLD.manaMax;
+  lairHp = WORLD.lairMaxHp;
+  selectedLane = 0;
   gameOver = false;
+  victory = false;
+  updateBars();
   updateHud();
+  updateSpawnButtons();
 }
 
 function startGame() {
@@ -65,292 +180,328 @@ function startGame() {
   statusEl.textContent = "";
 }
 
-function update(delta) {
+function trySpawnTroop(troopKey) {
   if (!started || gameOver) return;
+  const spec = TROOP_TYPES[troopKey];
+  if (!spec || mana < spec.cost) return;
 
-  elapsed += delta;
-  spawnTimer += delta * 1000;
-  fireTimer += delta * 1000;
-
-  const move = getMove();
-  player.x += move.x * WORLD.playerSpeed * delta;
-  player.y += move.y * WORLD.playerSpeed * delta;
-  player.x = clamp(player.x, player.r, canvas.width - player.r);
-  player.y = clamp(player.y, player.r, canvas.height - player.r);
-
-  const interval = Math.max(230, WORLD.enemySpawnMs - elapsed * 11);
-  while (spawnTimer >= interval) {
-    spawnEnemy();
-    spawnTimer -= interval;
-  }
-
-  if (fireTimer >= WORLD.fireRateMs) {
-    shootNearest();
-    fireTimer = 0;
-  }
-
-  const enemySpeed = WORLD.enemySpeedBase + elapsed * 1.3;
-  enemies.forEach((enemy) => {
-    const dx = player.x - enemy.x;
-    const dy = player.y - enemy.y;
-    const d = Math.hypot(dx, dy) || 1;
-    enemy.x += (dx / d) * enemySpeed * delta;
-    enemy.y += (dy / d) * enemySpeed * delta;
-    if (d < player.r + enemy.r) {
-      player.hp -= WORLD.touchDamagePerSecond * delta;
-    }
+  mana -= spec.cost;
+  troops.push({
+    key: troopKey,
+    lane: selectedLane,
+    x: LAIR_X + 28,
+    y: laneCenterY(selectedLane),
+    hp: spec.hpMax,
+    maxHp: spec.hpMax,
+    attackT: 0
   });
-
-  bullets.forEach((b) => {
-    b.x += b.vx * delta;
-    b.y += b.vy * delta;
-  });
-  bullets = bullets.filter((b) => b.life > 0 && b.x > -30 && b.x < canvas.width + 30 && b.y > -30 && b.y < canvas.height + 30);
-
-  resolveHits();
-  collectSouls();
+  updateBars();
+  updateSpawnButtons();
   updateHud();
+}
 
-  if (player.hp <= 0) {
-    player.hp = 0;
-    gameOver = true;
-    statusEl.textContent = `Defeated after ${Math.floor(elapsed)}s - Press Space to restart`;
+function monstersInLane(lane) {
+  return troops.filter((t) => t.lane === lane && t.hp > 0);
+}
+
+function frontMonster(lane) {
+  const list = monstersInLane(lane);
+  if (list.length === 0) return null;
+  return list.reduce((a, b) => (a.x > b.x ? a : b));
+}
+
+function heroAt(lane) {
+  return heroes.find((h) => h.lane === lane && h.hp > 0) || null;
+}
+
+function applyDamageToHero(hero, raw) {
+  const def = HERO_CLASSES[hero.classKey];
+  const mitigated = raw * (1 - def.armor);
+  hero.hp -= mitigated;
+}
+
+function tryPriestHeal(priestHero, delta) {
+  const def = HERO_CLASSES.priest;
+  priestHero.healT += delta;
+  if (priestHero.healT < def.healCd) return;
+  priestHero.healT = 0;
+
+  let best = null;
+  let bestRatio = 1.05;
+  for (const ally of heroes) {
+    if (ally.hp <= 0 || ally === priestHero) continue;
+    const dist = Math.hypot(ally.x - priestHero.x, ally.y - priestHero.y);
+    if (dist > def.healRange) continue;
+    const ratio = ally.hp / ally.maxHp;
+    if (ratio < bestRatio) {
+      bestRatio = ratio;
+      best = ally;
+    }
+  }
+
+  if (best) {
+    best.hp = Math.min(best.maxHp, best.hp + def.healAmount);
+  }
+}
+
+function updateHero(p, delta) {
+  const def = HERO_CLASSES[p.classKey];
+  const foe = frontMonster(p.lane);
+  const foeR = foe ? TROOP_TYPES[foe.key].radius : 0;
+
+  if (p.classKey === "priest") {
+    tryPriestHeal(p, delta);
+  }
+
+  if (p.x <= LAIR_CORE_X + def.radius) {
+    lairHp -= WORLD.lairTouchDps * delta;
+    p.attackT = 0;
+    return;
+  }
+
+  p.attackT += delta;
+
+  if (!foe) {
+    p.x -= def.speed * delta;
+    return;
+  }
+
+  const reachX = foe.x + def.radius + foeR + def.range;
+  if (p.x > reachX) {
+    p.x -= def.speed * delta;
+    if (p.x < reachX) p.x = reachX;
+    return;
+  }
+
+  if (p.attackT >= def.attackCd) {
+    p.attackT = 0;
+    foe.hp -= def.damage;
+  }
+}
+
+function updateTroop(u, delta) {
+  const spec = TROOP_TYPES[u.key];
+  const hero = heroAt(u.lane);
+
+  u.attackT += delta;
+
+  if (!hero) {
+    u.x += spec.speed * delta;
+    if (u.x > canvas.width + 40) u.hp = 0;
+    return;
+  }
+
+  const def = HERO_CLASSES[hero.classKey];
+  const gap = hero.x - u.x;
+  const needDist = def.radius + spec.radius + spec.range;
+
+  if (gap > needDist) {
+    u.x += spec.speed * delta;
+    const maxX = hero.x - def.radius - spec.radius - 2;
+    if (u.x > maxX) u.x = maxX;
+    return;
+  }
+
+  if (u.attackT >= spec.attackCd) {
+    u.attackT = 0;
+    applyDamageToHero(hero, spec.damage);
+  }
+}
+
+function update(delta) {
+  if (!started) return;
+
+  if (!gameOver) {
+    mana = Math.min(WORLD.manaMax, mana + WORLD.manaRegen * delta);
+
+    heroes.forEach((h) => {
+      if (h.hp > 0) updateHero(h, delta);
+    });
+
+    troops.forEach((u) => {
+      if (u.hp > 0) updateTroop(u, delta);
+    });
+
+    troops = troops.filter((u) => u.hp > 0);
+
+    updateBars();
     updateHud();
+    updateSpawnButtons();
+
+    const aliveHeroes = heroes.filter((h) => h.hp > 0);
+    if (lairHp <= 0) {
+      lairHp = 0;
+      gameOver = true;
+      victory = false;
+      statusEl.textContent = "The lair has fallen — Space to retry";
+    } else if (aliveHeroes.length === 0) {
+      gameOver = true;
+      victory = true;
+      statusEl.textContent = "Invaders repelled! Space to play again";
+    }
   }
 }
 
-function resolveHits() {
-  const survivors = [];
+function updateBars() {
+  manaTextEl.textContent = `${Math.floor(mana)} / ${WORLD.manaMax}`;
+  manaFillEl.style.transform = `scaleX(${mana / WORLD.manaMax})`;
 
-  for (const enemy of enemies) {
-    let alive = true;
-    for (const b of bullets) {
-      if (distance(enemy.x, enemy.y, b.x, b.y) <= enemy.r + b.r) {
-        enemy.hp -= b.damage;
-        b.life -= 1;
-      }
-    }
-
-    if (enemy.hp <= 0) {
-      alive = false;
-      kills += 1;
-      souls.push({ x: enemy.x, y: enemy.y, r: 5, value: 1 });
-    }
-
-    if (alive) survivors.push(enemy);
-  }
-
-  enemies = survivors;
+  lairTextEl.textContent = `${Math.max(0, Math.floor(lairHp))} / ${WORLD.lairMaxHp}`;
+  lairFillEl.style.transform = `scaleX(${Math.max(0, lairHp) / WORLD.lairMaxHp})`;
 }
 
-function collectSouls() {
-  souls = souls.filter((soul) => {
-    const pickupRange = player.r + soul.r + 7;
-    if (distance(player.x, player.y, soul.x, soul.y) <= pickupRange) {
-      gainXp(soul.value);
-      return false;
-    }
-    return true;
+function updateHud() {
+  const alive = heroes.filter((h) => h.hp > 0).length;
+  heroesLeftEl.textContent = `Invaders: ${alive}`;
+  troopsOutEl.textContent = `Monsters: ${troops.filter((t) => t.hp > 0).length}`;
+  laneNumEl.textContent = String(selectedLane + 1);
+}
+
+function updateSpawnButtons() {
+  document.querySelectorAll(".spawn").forEach((btn) => {
+    const key = btn.dataset.troop;
+    const cost = TROOP_TYPES[key]?.cost ?? 999;
+    const disabled = !started || gameOver || mana < cost;
+    btn.disabled = disabled;
   });
 }
 
-function gainXp(amount) {
-  player.xp += amount;
-  while (player.xp >= player.xpNeed) {
-    player.xp -= player.xpNeed;
-    player.level += 1;
-    player.xpNeed = Math.floor(player.xpNeed * 1.3);
-    player.maxHp += 7;
-    player.hp = Math.min(player.maxHp, player.hp + 14);
-  }
-}
-
-function shootNearest() {
-  if (enemies.length === 0) return;
-
-  let target = enemies[0];
-  let best = distance(player.x, player.y, target.x, target.y);
-  for (const e of enemies) {
-    const d = distance(player.x, player.y, e.x, e.y);
-    if (d < best) {
-      best = d;
-      target = e;
-    }
-  }
-
-  const dx = target.x - player.x;
-  const dy = target.y - player.y;
-  const len = Math.hypot(dx, dy) || 1;
-
-  bullets.push({
-    x: player.x,
-    y: player.y,
-    vx: (dx / len) * WORLD.bulletSpeed,
-    vy: (dy / len) * WORLD.bulletSpeed,
-    r: 4,
-    life: 1,
-    damage: 1 + (player.level - 1) * 0.25
-  });
-}
-
-function spawnEnemy() {
-  const edge = Math.floor(Math.random() * 4);
-  const pad = 24;
-  let x = 0;
-  let y = 0;
-
-  if (edge === 0) {
-    x = randomRange(0, canvas.width);
-    y = -pad;
-  } else if (edge === 1) {
-    x = canvas.width + pad;
-    y = randomRange(0, canvas.height);
-  } else if (edge === 2) {
-    x = randomRange(0, canvas.width);
-    y = canvas.height + pad;
-  } else {
-    x = -pad;
-    y = randomRange(0, canvas.height);
-  }
-
-  enemies.push({
-    x,
-    y,
-    r: 14,
-    hp: 2 + elapsed * 0.025
-  });
-}
-
-function getMove() {
-  const left = keys.has("KeyA") || keys.has("ArrowLeft");
-  const right = keys.has("KeyD") || keys.has("ArrowRight");
-  const up = keys.has("KeyW") || keys.has("ArrowUp");
-  const down = keys.has("KeyS") || keys.has("ArrowDown");
-  let x = (right ? 1 : 0) - (left ? 1 : 0);
-  let y = (down ? 1 : 0) - (up ? 1 : 0);
-  const len = Math.hypot(x, y) || 1;
-  x /= len;
-  y /= len;
-  return { x, y };
-}
-
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawFloor();
-  drawSouls();
-  drawEnemies();
-  drawBullets();
-  drawPlayer();
-  drawXpBar();
-}
-
-function drawFloor() {
-  ctx.fillStyle = "#1d1126";
+function drawBackground() {
+  ctx.fillStyle = "#120a18";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-  for (let x = 0; x < canvas.width; x += 40) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-  }
-  for (let y = 0; y < canvas.height; y += 40) {
+  for (let i = 0; i < LANES; i += 1) {
+    const y = laneCenterY(i);
+    ctx.strokeStyle = "rgba(255,255,255,0.04)";
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
+
+  ctx.fillStyle = "rgba(80,40,120,0.35)";
+  ctx.fillRect(0, 0, LAIR_X + 70, canvas.height);
+
+  ctx.fillStyle = "#3a2060";
+  ctx.beginPath();
+  ctx.arc(LAIR_CORE_X, canvas.height / 2, 34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,200,255,0.35)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = "11px sans-serif";
+  ctx.fillText("LAIR", LAIR_CORE_X - 18, canvas.height / 2 - 44);
+
+  ctx.strokeStyle = "rgba(255,80,80,0.12)";
+  ctx.lineWidth = 2;
+  for (let x = canvas.width - 40; x > canvas.width - 220; x -= 24) {
+    ctx.beginPath();
+    ctx.moveTo(x, 40);
+    ctx.lineTo(x - 10, canvas.height - 40);
+    ctx.stroke();
+  }
 }
 
-function drawPlayer() {
-  ctx.fillStyle = "#8df0ff";
-  circle(player.x, player.y, player.r);
-  ctx.fillStyle = "#ffffff";
-  circle(player.x - 5, player.y - 4, 3);
-}
-
-function drawEnemies() {
-  enemies.forEach((enemy) => {
-    ctx.fillStyle = "#f15e7f";
-    circle(enemy.x, enemy.y, enemy.r);
-    ctx.fillStyle = "#8a2a43";
-    circle(enemy.x + 2, enemy.y + 2, enemy.r * 0.35);
-  });
-}
-
-function drawBullets() {
-  bullets.forEach((b) => {
-    ctx.fillStyle = "#ffe48a";
-    circle(b.x, b.y, b.r);
-  });
-}
-
-function drawSouls() {
-  souls.forEach((soul) => {
-    ctx.fillStyle = "#7dffad";
-    circle(soul.x, soul.y, soul.r);
-  });
-}
-
-function drawXpBar() {
-  const w = 240;
-  const h = 12;
-  const x = canvas.width - w - 14;
-  const y = 14;
-  const fill = player.xpNeed > 0 ? player.xp / player.xpNeed : 0;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = "#7dffad";
-  ctx.fillRect(x, y, w * fill, h);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
-  ctx.strokeRect(x, y, w, h);
-}
-
-function updateHud() {
-  timeEl.textContent = `Time: ${Math.floor(elapsed)}s`;
-  hpEl.textContent = `HP: ${Math.max(0, Math.floor(player.hp))}`;
-  levelEl.textContent = `Level: ${player.level}`;
-  killsEl.textContent = `Kills: ${kills}`;
-}
-
-function circle(x, y, r) {
+function drawUnitCircle(x, y, r, fill, stroke) {
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
   ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 }
 
-function distance(x1, y1, x2, y2) {
-  return Math.hypot(x2 - x1, y2 - y1);
+function drawHealthBar(x, y, w, ratio, fill, bg) {
+  const bw = w;
+  const bh = 5;
+  ctx.fillStyle = bg;
+  ctx.fillRect(x - bw / 2, y, bw, bh);
+  ctx.fillStyle = fill;
+  ctx.fillRect(x - bw / 2, y, bw * clamp(ratio, 0, 1));
 }
 
-function randomRange(min, max) {
-  return Math.random() * (max - min) + min;
+function drawTroop(u) {
+  const spec = TROOP_TYPES[u.key];
+  drawUnitCircle(u.x, u.y, spec.radius, spec.color, "rgba(0,0,0,0.35)");
+  drawHealthBar(u.x, u.y - spec.radius - 9, 34, u.hp / u.maxHp, "#5cff8a", "rgba(0,0,0,0.5)");
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function drawHero(h) {
+  if (h.hp <= 0) return;
+  const def = HERO_CLASSES[h.classKey];
+  drawUnitCircle(h.x, h.y, def.radius, def.plate, "rgba(255,255,255,0.25)");
+  drawUnitCircle(h.x, h.y, def.radius * 0.72, def.color, null);
+  drawHealthBar(h.x, h.y - def.radius - 10, 44, h.hp / h.maxHp, "#6ec8ff", "rgba(0,0,0,0.55)");
+
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.font = "10px sans-serif";
+  const label = def.short;
+  ctx.fillText(label, h.x - ctx.measureText(label).width / 2, h.y + def.radius + 14);
+}
+
+function draw() {
+  drawBackground();
+  troops.forEach(drawTroop);
+  heroes.forEach(drawHero);
+
+  if (!started) {
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#f4ebff";
+    ctx.font = "18px sans-serif";
+    ctx.fillText("Space — Enter the Lair", canvas.width / 2 - 112, canvas.height / 2);
+  } else if (gameOver) {
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  ctx.strokeStyle = "rgba(255, 200, 120, 0.55)";
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo(LAIR_X + 18, laneCenterY(selectedLane));
+  ctx.lineTo(canvas.width - 18, laneCenterY(selectedLane));
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
 }
 
 function gameLoop(now) {
-  const delta = Math.min((now - lastTime) / 1000, 0.05);
+  const delta = Math.min((now - lastTime) / 1000, 0.06);
   lastTime = now;
   update(delta);
   draw();
   requestAnimationFrame(gameLoop);
 }
 
+document.querySelectorAll(".spawn").forEach((btn) => {
+  btn.addEventListener("click", () => trySpawnTroop(btn.dataset.troop));
+});
+
 window.addEventListener("keydown", (e) => {
-  keys.add(e.code);
   if (e.code === "Space") {
     e.preventDefault();
     if (!started || gameOver) startGame();
+    return;
+  }
+  if (e.code === "Digit1") selectedLane = 0;
+  if (e.code === "Digit2") selectedLane = 1;
+  if (e.code === "Digit3") selectedLane = 2;
+  if (e.code === "Digit4") selectedLane = 3;
+  if (e.code === "Digit5") selectedLane = 4;
+  if (/^Digit[1-5]$/.test(e.code)) {
+    updateHud();
   }
 });
 
-window.addEventListener("keyup", (e) => {
-  keys.delete(e.code);
-});
-
-updateHud();
+resetGame();
+statusEl.textContent = "Press Space to defend the Lair";
+updateSpawnButtons();
 requestAnimationFrame(gameLoop);

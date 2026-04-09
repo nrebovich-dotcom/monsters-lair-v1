@@ -9,7 +9,7 @@ body {
   place-items: center;
   font-family: Arial, Helvetica, sans-serif;
   color: #f4ebff;
-  background: radial-gradient(circle at top, #24112f 0%, #140a1c 50%, #09050f 100%);
+  background: radial-gradient(circle at top, #2a1535 0%, #120818 55%, #07050c 100%);
 }
 
 .app {
@@ -23,25 +23,103 @@ h1 {
 
 .help {
   margin-top: 0;
-  color: #cfb1ff;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #c9a8e8;
+  max-width: 52rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.bar-wrap {
+  margin: 0.5rem auto 0;
+  max-width: 420px;
+  text-align: left;
+}
+
+.bar-label {
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+  color: #deb8ff;
+}
+
+.bar {
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.bar.mana #manaFill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #6b4cff, #9f7cff);
+  transform-origin: left;
+  transition: transform 0.12s ease-out;
+}
+
+.bar.lair #lairFill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #8b2942, #e04f6d);
+  transform-origin: left;
+  transition: transform 0.12s ease-out;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0.75rem 0 0.35rem;
+}
+
+.lane-label {
+  width: 100%;
+  font-size: 0.88rem;
+  color: #ffd8a8;
+}
+
+.spawn {
+  font: inherit;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #7040a3;
+  background: linear-gradient(180deg, #3d2654, #261836);
+  color: #f4ebff;
+  cursor: pointer;
+}
+
+.spawn:hover {
+  border-color: #9b6fd4;
+  background: linear-gradient(180deg, #52356f, #2d1f42);
+}
+
+.spawn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 #gameCanvas {
   width: 100%;
   border: 2px solid #7040a3;
   border-radius: 8px;
-  background: #1a1124;
+  background: #150c1c;
 }
 
 .hud {
-  margin-top: 0.8rem;
+  margin-top: 0.65rem;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1rem;
+  gap: 1.2rem;
+  font-size: 0.95rem;
 }
 
 #status {
   min-height: 1.5rem;
+  margin-top: 0.35rem;
   color: #ffd2e8;
 }
